@@ -72,6 +72,18 @@ app.get(
   }
 );
 
+app.get("/api/v1/profile", (_req, res) => {
+  res.json({
+    message: "Use POST /api/v1/profile to fetch a LinkedIn profile.",
+    example: {
+      method: "POST",
+      body: {
+        url: "https://www.linkedin.com/in/example/"
+      }
+    }
+  });
+});
+
 app.post(
   "/api/v1/profile",
   async (req, res) => {
