@@ -1,0 +1,46 @@
+{
+  "id": "fixture-001",
+  "name": {
+    "fullName": "Jane Doe",
+    "firstName": "Jane",
+    "lastName": "Doe"
+  },
+  "headline": "Senior Software Engineer",
+  "location": {
+    "city": "Mumbai",
+    "country": "India"
+  },
+  "about": "Example profile used for API testing.",
+  "profileImage": null,
+  "experience": [
+    {
+      "title": "Senior Software Engineer",
+      "company": "Example Technologies",
+      "location": "Mumbai, India",
+      "startDate": "2022-01",
+      "endDate": null,
+      "current": true
+    }
+  ],
+  "education": [
+    {
+      "school": "Example University",
+      "degree": "Bachelor of Engineering",
+      "fieldOfStudy": "Computer Science",
+      "startDate": "2015",
+      "endDate": "2019"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "React",
+    "Node.js"
+  ],
+  "certifications": [],
+  "languages": [
+    {
+      "name": "English",
+      "proficiency": null
+    }
+  ]
+}
