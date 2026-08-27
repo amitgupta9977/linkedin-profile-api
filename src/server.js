@@ -30,7 +30,9 @@ app.use(
 app.use(morgan("combined"));
 
 /**
+ * ==========================================
  * LinkedIn OAuth - Start Login
+ * ==========================================
  *
  * Open:
  * https://linkedin-profile-api-45hp.onrender.com/auth/linkedin
@@ -86,15 +88,320 @@ app.get(
 );
 
 /**
- * Health check
+ * ==========================================
+ * LinkedIn OAuth - Callback
+ * ==========================================
+ */
+app.get(
+  "/auth/linkedin/callback",
+  async (req, res) => {
+    try {
+      const code =
+        req.query?.code;
+
+      const error =
+        req.query?.error;
+
+      /**
+       * User denied authorization
+       */
+      if (error) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "LINKEDIN_AUTH_ERROR",
+
+              message:
+                req.query
+                  ?.error_description ||
+                error
+            }
+          });
+      }
+
+      /**
+       * Authorization code missing
+       */
+      if (!code) {
+        return res
+          .status(400)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "AUTHORIZATION_CODE_MISSING",
+
+              message:
+                "LinkedIn authorization code was not provided."
+            }
+          });
+      }
+
+      const clientId =
+        process.env.LINKEDIN_CLIENT_ID;
+
+      const clientSecret =
+        process.env.LINKEDIN_CLIENT_SECRET;
+
+      const redirectUri =
+        process.env.LINKEDIN_REDIRECT_URI;
+
+      /**
+       * Check OAuth configuration
+       */
+      if (
+        !clientId ||
+        !clientSecret ||
+        !redirectUri
+      ) {
+        return res
+          .status(503)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "LINKEDIN_OAUTH_NOT_CONFIGURED",
+
+              message:
+                "LinkedIn OAuth credentials are not configured."
+            }
+          });
+      }
+
+      /**
+       * ======================================
+       * Exchange authorization code
+       * for access token
+       * ======================================
+       */
+      const tokenResponse =
+        await fetch(
+          "https://www.linkedin.com/oauth/v2/accessToken",
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/x-www-form-urlencoded"
+            },
+
+            body:
+              new URLSearchParams({
+                grant_type:
+                  "authorization_code",
+
+                code,
+
+                client_id:
+                  clientId,
+
+                client_secret:
+                  clientSecret,
+
+                redirect_uri:
+                  redirectUri
+              })
+          }
+        );
+
+      let tokenData = null;
+
+      try {
+        tokenData =
+          await tokenResponse.json();
+      } catch {
+        tokenData = null;
+      }
+
+      /**
+       * Token request failed
+       */
+      if (!tokenResponse.ok) {
+        console.error(
+          "LinkedIn token error:",
+          tokenData
+        );
+
+        return res
+          .status(502)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "LINKEDIN_TOKEN_ERROR",
+
+              message:
+                tokenData
+                  ?.error_description ||
+                tokenData?.error ||
+                `LinkedIn token endpoint returned HTTP ${tokenResponse.status}.`
+            }
+          });
+      }
+
+      const accessToken =
+        tokenData?.access_token;
+
+      /**
+       * Access token missing
+       */
+      if (!accessToken) {
+        return res
+          .status(502)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "LINKEDIN_ACCESS_TOKEN_MISSING",
+
+              message:
+                "LinkedIn did not return an access token."
+            }
+          });
+      }
+
+      /**
+       * ======================================
+       * Fetch authenticated LinkedIn profile
+       * ======================================
+       */
+      const profileResponse =
+        await fetch(
+          "https://api.linkedin.com/v2/userinfo",
+          {
+            method:
+              "GET",
+
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
+
+              Accept:
+                "application/json"
+            }
+          }
+        );
+
+      let profileData = null;
+
+      try {
+        profileData =
+          await profileResponse.json();
+      } catch {
+        profileData = null;
+      }
+
+      /**
+       * Profile request failed
+       */
+      if (!profileResponse.ok) {
+        console.error(
+          "LinkedIn profile error:",
+          profileData
+        );
+
+        return res
+          .status(502)
+          .json({
+            success: false,
+
+            error: {
+              code:
+                "LINKEDIN_PROFILE_ERROR",
+
+              message:
+                profileData?.message ||
+                `LinkedIn userinfo endpoint returned HTTP ${profileResponse.status}.`
+            }
+          });
+      }
+
+      /**
+       * ======================================
+       * Return normalized LinkedIn profile
+       * ======================================
+       */
+      return res.json({
+        success: true,
+
+        profile: {
+          id:
+            profileData?.sub ??
+            null,
+
+          name: {
+            fullName:
+              profileData?.name ??
+              null,
+
+            firstName:
+              profileData?.given_name ??
+              null,
+
+            lastName:
+              profileData?.family_name ??
+              null
+          },
+
+          email:
+            profileData?.email ??
+            null,
+
+          profileImage:
+            profileData?.picture ??
+            null,
+
+          locale:
+            profileData?.locale ??
+            null
+        }
+      });
+    } catch (error) {
+      console.error(
+        "LinkedIn OAuth callback error:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+
+          error: {
+            code:
+              "LINKEDIN_OAUTH_CALLBACK_ERROR",
+
+            message:
+              "Unexpected error during LinkedIn authentication."
+          }
+        });
+    }
+  }
+);
+
+/**
+ * ==========================================
+ * Health Check
+ * ==========================================
  */
 app.get(
   "/health",
   (_req, res) => {
     res.json({
       ok: true,
+
       service:
         "linkedin-profile-api",
+
       provider:
         provider.name
     });
@@ -102,7 +409,9 @@ app.get(
 );
 
 /**
+ * ==========================================
  * API Documentation
+ * ==========================================
  */
 app.get(
   "/api/v1/docs",
@@ -165,7 +474,9 @@ app.get(
 );
 
 /**
- * GET profile endpoint information
+ * ==========================================
+ * GET Profile Information
+ * ==========================================
  */
 app.get(
   "/api/v1/profile",
@@ -188,7 +499,9 @@ app.get(
 );
 
 /**
- * Fetch LinkedIn profile
+ * ==========================================
+ * POST Profile
+ * ==========================================
  */
 app.post(
   "/api/v1/profile",
@@ -223,7 +536,8 @@ app.post(
       });
     } catch (error) {
       const status =
-        error.statusCode || 500;
+        error.statusCode ||
+        500;
 
       return res
         .status(status)
@@ -246,26 +560,32 @@ app.post(
 );
 
 /**
- * 404 handler
+ * ==========================================
+ * 404 Handler
+ * ==========================================
  */
 app.use(
   (_req, res) => {
-    res.status(404).json({
-      success: false,
+    res
+      .status(404)
+      .json({
+        success: false,
 
-      error: {
-        code:
-          "NOT_FOUND",
+        error: {
+          code:
+            "NOT_FOUND",
 
-        message:
-          "Route not found"
-      }
-    });
+          message:
+            "Route not found"
+        }
+      });
   }
 );
 
 /**
- * Start server
+ * ==========================================
+ * Start Server
+ * ==========================================
  */
 app.listen(
   port,
