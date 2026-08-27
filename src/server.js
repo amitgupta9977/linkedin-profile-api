@@ -29,13 +29,22 @@ app.use(
 
 app.use(morgan("combined"));
 
-/**
+/*
  * ==========================================
- * LinkedIn OAuth - Start Login
+ * Temporary in-memory OAuth token storage
  * ==========================================
  *
- * Open:
- * https://linkedin-profile-api-45hp.onrender.com/auth/linkedin
+ * IMPORTANT:
+ * This is suitable for testing only.
+ * Tokens will be lost when Render restarts.
+ */
+let linkedinAccessToken = null;
+
+
+/*
+ * ==========================================
+ * LinkedIn OAuth - Start
+ * ==========================================
  */
 app.get(
   "/auth/linkedin",
@@ -47,19 +56,17 @@ app.get(
       process.env.LINKEDIN_REDIRECT_URI;
 
     if (!clientId || !redirectUri) {
-      return res
-        .status(503)
-        .json({
-          success: false,
+      return res.status(503).json({
+        success: false,
 
-          error: {
-            code:
-              "LINKEDIN_OAUTH_NOT_CONFIGURED",
+        error: {
+          code:
+            "LINKEDIN_OAUTH_NOT_CONFIGURED",
 
-            message:
-              "LinkedIn OAuth client ID or redirect URI is not configured."
-          }
-        });
+          message:
+            "LinkedIn OAuth client ID or redirect URI is not configured."
+        }
+      });
     }
 
     const state =
@@ -67,7 +74,8 @@ app.get(
 
     const params =
       new URLSearchParams({
-        response_type: "code",
+        response_type:
+          "code",
 
         client_id:
           clientId,
@@ -87,7 +95,8 @@ app.get(
   }
 );
 
-/**
+
+/*
  * ==========================================
  * LinkedIn OAuth - Callback
  * ==========================================
@@ -102,44 +111,40 @@ app.get(
       const error =
         req.query?.error;
 
-      /**
-       * User denied authorization
+      /*
+       * User rejected authorization
        */
       if (error) {
-        return res
-          .status(400)
-          .json({
-            success: false,
+        return res.status(400).json({
+          success: false,
 
-            error: {
-              code:
-                "LINKEDIN_AUTH_ERROR",
+          error: {
+            code:
+              "LINKEDIN_AUTH_ERROR",
 
-              message:
-                req.query
-                  ?.error_description ||
-                error
-            }
-          });
+            message:
+              req.query
+                ?.error_description ||
+              error
+          }
+        });
       }
 
-      /**
+      /*
        * Authorization code missing
        */
       if (!code) {
-        return res
-          .status(400)
-          .json({
-            success: false,
+        return res.status(400).json({
+          success: false,
 
-            error: {
-              code:
-                "AUTHORIZATION_CODE_MISSING",
+          error: {
+            code:
+              "AUTHORIZATION_CODE_MISSING",
 
-              message:
-                "LinkedIn authorization code was not provided."
-            }
-          });
+            message:
+              "LinkedIn authorization code was not provided."
+          }
+        });
       }
 
       const clientId =
@@ -151,30 +156,25 @@ app.get(
       const redirectUri =
         process.env.LINKEDIN_REDIRECT_URI;
 
-      /**
-       * Check OAuth configuration
-       */
       if (
         !clientId ||
         !clientSecret ||
         !redirectUri
       ) {
-        return res
-          .status(503)
-          .json({
-            success: false,
+        return res.status(503).json({
+          success: false,
 
-            error: {
-              code:
-                "LINKEDIN_OAUTH_NOT_CONFIGURED",
+          error: {
+            code:
+              "LINKEDIN_OAUTH_NOT_CONFIGURED",
 
-              message:
-                "LinkedIn OAuth credentials are not configured."
-            }
-          });
+            message:
+              "LinkedIn OAuth credentials are not configured."
+          }
+        });
       }
 
-      /**
+      /*
        * ======================================
        * Exchange authorization code
        * for access token
@@ -220,58 +220,56 @@ app.get(
         tokenData = null;
       }
 
-      /**
-       * Token request failed
-       */
       if (!tokenResponse.ok) {
         console.error(
           "LinkedIn token error:",
           tokenData
         );
 
-        return res
-          .status(502)
-          .json({
-            success: false,
+        return res.status(502).json({
+          success: false,
 
-            error: {
-              code:
-                "LINKEDIN_TOKEN_ERROR",
+          error: {
+            code:
+              "LINKEDIN_TOKEN_ERROR",
 
-              message:
-                tokenData
-                  ?.error_description ||
-                tokenData?.error ||
-                `LinkedIn token endpoint returned HTTP ${tokenResponse.status}.`
-            }
-          });
+            message:
+              tokenData
+                ?.error_description ||
+              tokenData?.error ||
+              `LinkedIn token endpoint returned HTTP ${tokenResponse.status}.`
+          }
+        });
       }
 
       const accessToken =
         tokenData?.access_token;
 
-      /**
-       * Access token missing
-       */
       if (!accessToken) {
-        return res
-          .status(502)
-          .json({
-            success: false,
+        return res.status(502).json({
+          success: false,
 
-            error: {
-              code:
-                "LINKEDIN_ACCESS_TOKEN_MISSING",
+          error: {
+            code:
+              "LINKEDIN_ACCESS_TOKEN_MISSING",
 
-              message:
-                "LinkedIn did not return an access token."
-            }
-          });
+            message:
+              "LinkedIn did not return an access token."
+          }
+        });
       }
 
-      /**
+      /*
+       * Store token temporarily.
+       *
+       * DO NOT log the token.
+       */
+      linkedinAccessToken =
+        accessToken;
+
+      /*
        * ======================================
-       * Fetch authenticated LinkedIn profile
+       * Fetch authenticated LinkedIn user
        * ======================================
        */
       const profileResponse =
@@ -300,38 +298,36 @@ app.get(
         profileData = null;
       }
 
-      /**
-       * Profile request failed
-       */
       if (!profileResponse.ok) {
         console.error(
           "LinkedIn profile error:",
           profileData
         );
 
-        return res
-          .status(502)
-          .json({
-            success: false,
+        return res.status(502).json({
+          success: false,
 
-            error: {
-              code:
-                "LINKEDIN_PROFILE_ERROR",
+          error: {
+            code:
+              "LINKEDIN_PROFILE_ERROR",
 
-              message:
-                profileData?.message ||
-                `LinkedIn userinfo endpoint returned HTTP ${profileResponse.status}.`
-            }
-          });
+            message:
+              profileData?.message ||
+              `LinkedIn userinfo endpoint returned HTTP ${profileResponse.status}.`
+          }
+        });
       }
 
-      /**
+      /*
        * ======================================
-       * Return normalized LinkedIn profile
+       * Return authenticated profile
        * ======================================
        */
       return res.json({
         success: true,
+
+        message:
+          "LinkedIn authentication successful.",
 
         profile: {
           id:
@@ -371,26 +367,25 @@ app.get(
         error
       );
 
-      return res
-        .status(500)
-        .json({
-          success: false,
+      return res.status(500).json({
+        success: false,
 
-          error: {
-            code:
-              "LINKEDIN_OAUTH_CALLBACK_ERROR",
+        error: {
+          code:
+            "LINKEDIN_OAUTH_CALLBACK_ERROR",
 
-            message:
-              "Unexpected error during LinkedIn authentication."
-          }
-        });
+          message:
+            "Unexpected error during LinkedIn authentication."
+        }
+      });
     }
   }
 );
 
-/**
+
+/*
  * ==========================================
- * Health Check
+ * Health
  * ==========================================
  */
 app.get(
@@ -403,12 +398,16 @@ app.get(
         "linkedin-profile-api",
 
       provider:
-        provider.name
+        provider.name,
+
+      linkedinAuthenticated:
+        Boolean(linkedinAccessToken)
     });
   }
 );
 
-/**
+
+/*
  * ==========================================
  * API Documentation
  * ==========================================
@@ -473,9 +472,10 @@ app.get(
   }
 );
 
-/**
+
+/*
  * ==========================================
- * GET Profile Information
+ * GET Profile
  * ==========================================
  */
 app.get(
@@ -498,7 +498,8 @@ app.get(
   }
 );
 
-/**
+
+/*
  * ==========================================
  * POST Profile
  * ==========================================
@@ -512,6 +513,15 @@ app.post(
 
       const parsed =
         validateLinkedInUrl(url);
+
+      /*
+       * If OAuth token exists, temporarily use
+       * it for the LinkedIn provider.
+       */
+      if (linkedinAccessToken) {
+        process.env.LINKEDIN_ACCESS_TOKEN =
+          linkedinAccessToken;
+      }
 
       const profile =
         await provider.getProfile({
@@ -531,7 +541,10 @@ app.post(
             provider.name,
 
           fetchedAt:
-            new Date().toISOString()
+            new Date().toISOString(),
+
+          authenticatedWithLinkedIn:
+            Boolean(linkedinAccessToken)
         }
       });
     } catch (error) {
@@ -559,30 +572,30 @@ app.post(
   }
 );
 
-/**
+
+/*
  * ==========================================
- * 404 Handler
+ * 404
  * ==========================================
  */
 app.use(
   (_req, res) => {
-    res
-      .status(404)
-      .json({
-        success: false,
+    res.status(404).json({
+      success: false,
 
-        error: {
-          code:
-            "NOT_FOUND",
+      error: {
+        code:
+          "NOT_FOUND",
 
-          message:
-            "Route not found"
-        }
-      });
+        message:
+          "Route not found"
+      }
+    });
   }
 );
 
-/**
+
+/*
  * ==========================================
  * Start Server
  * ==========================================
